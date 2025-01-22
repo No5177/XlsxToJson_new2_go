@@ -1,28 +1,28 @@
 @echo off
-echo 開始安裝 LTRp_XlsxToJSON...
+echo Starting installation of LTRp_XlsxToJSON...
 
-REM 檢查 Python 是否已安裝
+REM Check if Python is installed
 python --version > nul 2>&1
 if errorlevel 1 (
-    echo Python 未安裝，正在進行無聲安裝...
+    echo Python is not installed. Starting silent installation...
     start /wait python\python-3.13.1-amd64 /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 )
 
-REM 安裝必要套件
-echo 安裝必要套件...
+REM Install required packages
+echo Installing required packages...
 pip install --no-index --find-links=packages pandas openpyxl numpy
 
-REM 建立程式目錄
+REM Create program directory
 set INSTALL_DIR=%USERPROFILE%\LTRp_XlsxToJSON
-echo 建立程式目錄: %INSTALL_DIR%
+echo Creating program directory: %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-REM 複製程式檔案
-echo 複製程式檔案...
+REM Copy program files
+echo Copying program files...
 xcopy /E /I /Y ..\program\* "%INSTALL_DIR%"
 
 echo.
-echo 安裝完成！
-echo 程式已安裝到: %INSTALL_DIR%
-echo 請參考 docs/使用前請先閱讀此份文件.txt 了解使用方式
+echo Installation completed!
+echo Program installed to: %INSTALL_DIR%
+echo Please refer to docs/README.txt for usage instructions
 pause 

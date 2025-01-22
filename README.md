@@ -4,7 +4,7 @@
 
 ## 系統需求
 
-- Python 3.12 或更高版本
+- Python 3.13 或更高版本
 - 必要的 Python 套件：
   - pandas
   - openpyxl
