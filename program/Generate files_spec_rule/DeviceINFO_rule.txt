@@ -1,0 +1,7 @@
+DeviceINFO.json生成規則
+可參照DeviceINFO.json的格式
+Fwversion、ManufactureDate、CalibrationDate，三個欄位固定填寫為空值 ( "" )
+其餘參數，需要依據 "excel_A" 工作表名稱為"LTRp 資訊檔一覽表" 的 "指定設備型號" 的 "指定參數" 進行寫入，不可設定為固定值
+SeriesNumber在.excel_A中的內容格式會為 "AA,BBBB,CCCC"，需要將其結合成一整串的字串(AABBBBCCCC)寫入json，
+SeriesNumber在.excel_A中的內容格式會為 "11,40405,00001"，需要將其結合成一整串的字串(114040500001)寫入json，
+

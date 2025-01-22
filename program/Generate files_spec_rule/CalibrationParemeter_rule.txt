@@ -1,0 +1,22 @@
+CalibrationParemeter.json生成規則
+請完全依照以下資訊寫入，不要進行任何修改，完全固定不要修改!!
+{
+  "Gcvadc": 1,
+  "Ocvadc": 0,
+  "Gdvadc": 1,
+  "Odvadc": 0,
+  "Gccadc": 1,
+  "Occadc": 0,
+  "Gdcadc": 1,
+  "Odcadc": 0,
+  "Grvadc": 1,
+  "Orvadc": 0,
+  "Gcvdac": 1,
+  "Ocvdac": 0,
+  "Gdvdac": 1,
+  "Odvdac": 0,
+  "Gccdac": 1,
+  "Occdac": 0,
+  "Gdcdac": 1,
+  "Odcdac": 0
+}
