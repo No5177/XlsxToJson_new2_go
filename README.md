@@ -1,84 +1,89 @@
-# XLSX to JSON Converter
+# Excel 參數檔轉換工具
 
-此工具用於將 Excel (.xlsx) 檔案轉換為 JSON 格式，專門設計用於設備參數配置。
+此工具用於將 Excel (.xlsx) 檔案轉換為 JSON 格式的參數檔，專門用於設備參數配置管理。
 
 ## 系統需求
 
-- Python 3.13 或更高版本
+- Python 3.11 或更高版本
 - 必要的 Python 套件：
-  - pandas
-  - openpyxl
+  - pandas (用於 Excel 檔案處理)
+  - openpyxl (用於 .xlsx 檔案支援)
 
-## 安裝
+## 安裝與執行
 
-1. 複製專案
-2. 安裝相依套件：
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. 下載並解壓縮專案檔案
+2. 執行 `run2.bat` 啟動圖形介面
 
-## 使用方式
+> 注意：首次執行時會自動安裝必要的 Python 套件
 
-### 命令格式
-```bash
-python3 "py_Path" "xlsx_A_Path" "xlsx_B_Path" "DeviceName" "Output_NewPath"
-```
+## 使用說明
 
-### 參數說明
-- `py_Path`: Python 執行檔完整路徑
-- `xlsx_A_Path`: Excel A 檔案路徑（規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表）
-- `xlsx_B_Path`: Excel B 檔案路徑（控制檔一覽表）
-- `DeviceName`: 設備名稱
-- `Output_NewPath`: 輸出目錄路徑
+### 圖形介面操作步驟
 
-### 命令範例
-```bash
-python3 "C:/Devin/LTRp_XlsxToJSON/git/xlsx_to_json.py" "C:/Devin/LTRp_XlsxToJSON/git/example/excel_A.xlsx" "C:/Devin/LTRp_XlsxToJSON/git/example/Excel_B.xlsx" "TPT-B3HCR2020A" "C:/Devin/LTRp_XlsxToJSON/git/test_output"
-```
+1. 程式啟動後會自動載入 xlsx_to_json.py 的路徑
+2. 點選「瀏覽」按鈕選擇以下檔案：
+   - Excel 檔案 A（規格檔/保護檔/保護回復檔/資訊檔）
+   - Excel 檔案 B（控制檔）
+3. 輸入設備型號（例：TPT-B30R10100A）
+4. 選擇輸出目錄
+5. 點選「所有參數檔生成」開始轉換
 
-## 檔案限制
+### Excel 檔案格式要求
 
-### Excel A（規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表）
-- 工作表名稱必須為：
-  - "LTRp 規格檔一覽表"
-  - "LTRp 保護檔一覽表"
-  - "LTRp 保護回復檔一覽表"
-  - "LTRp 資訊檔一覽表"
+#### Excel 檔案 A
+必須包含以下工作表：
+- "LTRp 規格檔一覽表"
+- "LTRp 保護檔一覽表"
+- "LTRp 保護回復檔一覽表"
+- "LTRp 資訊檔一覽表"
 
-### Excel B（控制檔一覽表）
+#### Excel 檔案 B
 - 工作表名稱必須為："工作表1"
 
-### 重要注意事項
-1. 兩個 Excel 檔案的匯入位置不能互換
-2. 每個工作表中的參數名稱需要從 B7 開始
-3. 參數名稱中間不能有空值
+### 注意事項
+1. Excel A 與 B 檔案不可互換
+2. 參數名稱需從 B7 儲存格開始
+3. 參數名稱之間不可有空值
+4. 設備型號格式必須為：TPT-[數字及大寫英文字母]
 
 ## 輸出結果
-- 在指定的輸出目錄下建立以設備名稱命名的資料夾
-- 產生以下 JSON 檔案：
-  - DeviceINFO.json
-  - CalibrationParemeter.json
-  - FWSpecification.json
-  - FWControl.json
-  - OutputProtection.json
-  - ProtectReplyFile.json
 
-## 檔案結構
+程式會在指定的輸出目錄下建立以設備型號命名的資料夾，並產生以下 JSON 檔案：
+
 ```
-xlsxTojson/
-├── xlsx_to_json.py             # 主程式
-├── src/
-│   ├── excel_processor.py      # Excel 處理模組
-│   └── gui.py                  # GUI 介面
-└── docs/
-    ├── README.md               # 說明文件
-    ├── 使用前請先閱讀此份文件.txt    # 使用說明
-    └── 匯入檔案限制.txt          # 檔案限制說明
+設備型號/
+├── DeviceINFO.json          # 設備資訊
+├── CalibrationParemeter.json # 校正參數
+├── FWSpecification.json     # 韌體規格
+├── FWControl.json          # 韌體控制
+└── Protect/
+    ├── OutputProtection.json    # 輸出保護
+    └── ProtectReplyFile.json    # 保護回覆
 ```
 
-## GUI 使用範例
-- Python 檔案路徑：`C:/Devin/LTRp_XlsxToJSON/git/xlsx_to_json.py`
-- Excel A 路徑：`C:/Devin/LTRp_XlsxToJSON/git/example/excel_A.xlsx`
-- Excel B 路徑：`C:/Devin/LTRp_XlsxToJSON/git/example/Excel_B.xlsx`
-- 設備名稱：`TPT-B1R4040A`
-- 輸出路徑：`C:/Devin/LTRp_XlsxToJSON/git/test_output`
+## 專案結構
+```
+XlsxToJson/
+├── run2.bat                # 執行檔
+├── program/
+│   ├── xlsx_to_json.py     # 轉換核心程式
+│   ├── requirements.txt    # 套件需求檔
+│   └── src/
+│       └── gui.py         # 圖形介面程式
+└── README.md              # 說明文件
+```
+
+## 錯誤排除
+
+如果遇到執行錯誤，請檢查：
+1. Python 是否正確安裝
+2. Excel 檔案格式是否符合要求
+3. 檔案路徑是否包含特殊字元
+4. 輸出目錄是否有寫入權限
+
+## 支援與回報問題
+
+如發現任何問題或需要協助，請：
+1. 檢查命令執行狀態視窗的錯誤訊息
+2. 確認 Excel 檔案格式是否正確
+3. 聯繫技術支援人員

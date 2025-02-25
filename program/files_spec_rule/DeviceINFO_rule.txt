@@ -1,0 +1,6 @@
+# DeviceINFO.json生成規則
+# Excel A - 工作表："LTRp 資訊檔一覽表"
+# 特殊處理：
+# - Fwversion, ManufactureDate, CalibrationDate 固定為空值 ("")
+# - SeriesNumber 需要合併（例：AA,BBBB,CCCC -> AABBBBCCCC）
+LTRp 資訊檔一覽表,7,B,C

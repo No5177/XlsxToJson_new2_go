@@ -1,3 +1,0 @@
-FWSpecification.json生成規則(目前已完成)
-可參照FWSpecification.json的格式
-需要依據 "excel_A" 工作表名稱為"LTRp 規格檔一覽表" 的 "指定設備型號" 的 "指定參數" 進行寫入，不可設定為固定值

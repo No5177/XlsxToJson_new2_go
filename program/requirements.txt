@@ -1,14 +1,26 @@
-altgraph==0.17.4
-et_xmlfile==2.0.0
-numpy==2.2.1
-openpyxl==3.1.5
-packaging==24.2
-pandas==2.2.3
+# GUI 相關套件
+tkinter  # Python 內建，不需要額外安裝
+
+# Excel 處理相關套件
+pandas>=2.0.0
+openpyxl>=3.1.0
+et_xmlfile>=1.1.0  # openpyxl 的依賴
+
+# 基礎套件
+numpy==2.2.1  # pandas 的依賴
+python-dateutil==2.9.0.post0  # pandas 的依賴
+pytz==2024.2  # pandas 的依賴
+tzdata==2024.2  # 時區數據
+six==1.17.0  # python-dateutil 的依賴
+
+# 打包相關套件（僅開發時需要）
 pyinstaller==6.11.1
 pyinstaller-hooks-contrib==2024.11
+altgraph==0.17.4  # pyinstaller 的依賴
+
+# 測試相關套件（僅開發時需要）
 pytest==8.1.1
-python-dateutil==2.9.0.post0
-pytz==2024.2
-setuptools==75.7.0
-six==1.17.0
-tzdata==2024.2
+
+# 其他
+setuptools==75.7.0  # 基礎工具
+packaging==24.2  # 依賴管理
