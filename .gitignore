@@ -1,0 +1,27 @@
+# Excel files
+*.xlsx
+*.xls
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Environment
+venv/
+env/
+.env
+
+# Generated files
+*.log
+*.json 

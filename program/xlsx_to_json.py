@@ -4,9 +4,13 @@ import sys
 import json
 import argparse
 import pandas as pd
+import warnings
 from decimal import Decimal
 from typing import Dict, Any, Tuple, List
 from src.excel_processor import ExcelProcessor
+
+# 在程式開始時禁用特定警告
+warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 def get_resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller"""
@@ -19,41 +23,17 @@ def get_resource_path(relative_path):
             # Running in development
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             
-        # First try src directory for spec files
-        src_dir = os.path.join(base_path, 'src')
-        src_path = os.path.join(src_dir, relative_path)
-        if os.path.exists(src_path):
-            return src_path
-
-        # Then try with the full relative path
-        full_path = os.path.join(base_path, relative_path)
-        if os.path.exists(full_path):
-            return full_path
-
-        # Then try with just the basename in the root directory
-        base_name_path = os.path.join(base_path, os.path.basename(relative_path))
-        if os.path.exists(base_name_path):
-            return base_name_path
-
-        # If not found in base paths, try current directory
-        current_dir_path = os.path.join(os.getcwd(), relative_path)
-        if os.path.exists(current_dir_path):
-            return current_dir_path
-
-        # If still not found, try script directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_dir_path = os.path.join(script_dir, relative_path)
-        if os.path.exists(script_dir_path):
-            return script_dir_path
-
-        raise FileNotFoundError(
-            f"Resource not found: {relative_path}\n"
-            f"Tried paths:\n"
-            f"- {full_path}\n"
-            f"- {base_name_path}\n"
-            f"- {current_dir_path}\n"
-            f"- {script_dir_path}"
-        )
+        # Convert relative_path to absolute path
+        abs_path = os.path.abspath(relative_path)
+        if os.path.exists(abs_path):
+            return abs_path
+            
+        # Try with the base path
+        base_path_file = os.path.join(base_path, relative_path)
+        if os.path.exists(base_path_file):
+            return base_path_file
+            
+        raise FileNotFoundError(f"Resource not found: {relative_path}")
     except Exception as e:
         print(f"Error while locating resource {relative_path}: {str(e)}")
         raise
@@ -127,17 +107,72 @@ def check_and_fix_scientific_notation(json_path: str) -> None:
 
 def convert_xlsx_to_json(excel_a_path: str, excel_b_path: str, device_name: str, output_path: str | None = None):
     try:
+        # 確保使用絕對路徑
+        excel_a_path = os.path.abspath(excel_a_path)
+        excel_b_path = os.path.abspath(excel_b_path)
+        if output_path:
+            output_path = os.path.abspath(output_path)
+        else:
+            output_path = os.path.dirname(excel_a_path)
+            
+        # 添加詳細的錯誤輸出
+        print(f"處理檔案：\nExcel A: {excel_a_path}\nExcel B: {excel_b_path}\n設備名稱: {device_name}\n輸出路徑: {output_path}")
+            
         processor = ExcelProcessor()
         
-        # 載入 Excel 檔案
-        excel_data = {
-            'A': pd.ExcelFile(excel_a_path),
-            'B': pd.ExcelFile(excel_b_path)
-        }
+        # 檢查 Excel A 的工作表名稱
+        required_sheets_a = [
+            "LTRp 規格檔一覽表",
+            "LTRp 保護檔一覽表",
+            "LTRp 保護回復檔一覽表",
+            "LTRp 資訊檔一覽表"
+        ]
+        
+        # 載入 Excel 檔案並驗證工作表
+        try:
+            # 使用 pandas 直接讀取 Excel 檔案
+            excel_sheets_a = {}
+            excel_sheets_b = {}
+            
+            # 讀取 Excel A 的所有工作表
+            for sheet_name in required_sheets_a:
+                try:
+                    df = pd.read_excel(
+                        excel_a_path,
+                        sheet_name=sheet_name,
+                        engine='openpyxl',
+                        header=None  # 不使用標題行
+                    )
+                    excel_sheets_a[sheet_name] = df
+                except Exception as e:
+                    raise ValueError(f"無法讀取 Excel A 的工作表 {sheet_name}: {str(e)}")
+            
+            # 讀取 Excel B 的工作表1
+            try:
+                df = pd.read_excel(
+                    excel_b_path,
+                    sheet_name="工作表1",
+                    engine='openpyxl',
+                    header=None  # 不使用標題行
+                )
+                excel_sheets_b["工作表1"] = df
+            except Exception as e:
+                raise ValueError(f"無法讀取 Excel B 的工作表1: {str(e)}")
+            
+            excel_data = {
+                'A': excel_sheets_a,
+                'B': excel_sheets_b
+            }
+            
+        except Exception as e:
+            raise ValueError(f"讀取 Excel 檔案失敗：{str(e)}")
+        
+        # 驗證設備名稱格式
+        is_valid, error_msg = validate_device_name(device_name)
+        if not is_valid:
+            raise ValueError(error_msg)
         
         # 確保輸出路徑存在
-        if output_path is None:
-            output_path = os.path.dirname(excel_a_path)
         os.makedirs(output_path, exist_ok=True)
         
         json_files = [
@@ -150,50 +185,115 @@ def convert_xlsx_to_json(excel_a_path: str, excel_b_path: str, device_name: str,
         ]
 
         error_messages = []
-
+        
+        # 定義各 JSON 檔案的處理規則
+        json_rules = {
+            "DeviceINFO": {
+                "sheet_name": "LTRp 資訊檔一覽表",
+                "excel_file": "A"
+            },
+            "FWSpecification": {
+                "sheet_name": "LTRp 規格檔一覽表",
+                "excel_file": "A"
+            },
+            "FWControl": {
+                "sheet_name": "工作表1",
+                "excel_file": "B"
+            },
+            "OutputProtection": {
+                "sheet_name": "LTRp 保護檔一覽表",
+                "excel_file": "A"
+            },
+            "ProtectReplyFile": {
+                "sheet_name": "LTRp 保護回復檔一覽表",
+                "excel_file": "A"
+            }
+        }
+        
         for json_name in json_files:
             try:
-                # 特殊處理 CalibrationParemeter.json
+                print(f"正在處理 {json_name}...")
+                
                 if json_name == "CalibrationParemeter":
                     parameters = {
-                        "Gcvadc": 1,
-                        "Ocvadc": 0,
-                        "Gdvadc": 1,
-                        "Odvadc": 0,
-                        "Gccadc": 1,
-                        "Occadc": 0,
-                        "Gdcadc": 1,
-                        "Odcadc": 0,
-                        "Grvadc": 1,
-                        "Orvadc": 0,
-                        "Gcvdac": 1,
-                        "Ocvdac": 0,
-                        "Gdvdac": 1,
-                        "Odvdac": 0,
-                        "Gccdac": 1,
-                        "Occdac": 0,
-                        "Gdcdac": 1,
-                        "Odcdac": 0
+                        "Gcvadc": 1, "Ocvadc": 0,
+                        "Gdvadc": 1, "Odvadc": 0,
+                        "Gccadc": 1, "Occadc": 0,
+                        "Gdcadc": 1, "Odcadc": 0,
+                        "Grvadc": 1, "Orvadc": 0,
+                        "Gcvdac": 1, "Ocvdac": 0,
+                        "Gdvdac": 1, "Odvdac": 0,
+                        "Gccdac": 1, "Occdac": 0,
+                        "Gdcdac": 1, "Odcdac": 0
                     }
                 else:
-                    parameters = processor.process_by_rule(
-                        json_name,
-                        excel_data,
-                        device_name
-                    )
+                    # 根據規則處理其他 JSON 檔案
+                    rule = json_rules.get(json_name)
+                    if not rule:
+                        raise ValueError(f"找不到 {json_name} 的處理規則")
+                    
+                    # 獲取對應的工作表數據
+                    excel_sheets = excel_data[rule["excel_file"]]
+                    sheet_name = rule["sheet_name"]
+                    df = excel_sheets[sheet_name]
+                    
+                    # 從第4行獲取設備型號列表
+                    device_list = df.iloc[3]  # 第4行 (索引3)
+                    
+                    # 找到設備型號所在的列
+                    device_col = None
+                    for col in range(df.shape[1]):
+                        if str(device_list.iloc[col]).strip() == device_name:
+                            device_col = col
+                            break
+                    
+                    if device_col is None:
+                        raise ValueError(f"在工作表 {sheet_name} 中找不到設備型號 {device_name}")
+                    
+                    # 使用有序字典來保持參數順序
+                    from collections import OrderedDict
+                    parameters = OrderedDict()
+                    
+                    # 處理所有參數
+                    for row_idx in range(6, df.shape[0]):  # 從第6行開始
+                        row = df.iloc[row_idx]
+                        param_name = str(row.iloc[1]).strip()  # 參數名稱在第2列
+                        param_value = row.iloc[device_col]  # 參數值在找到的設備型號列
+                        
+                        if not param_name or pd.isna(param_value):
+                            continue
+                        
+                        # 根據數據類型進行適當的處理
+                        if isinstance(param_value, (int, float)):
+                            parameters[param_name] = param_value
+                        else:
+                            # 特殊處理 SeriesNumber
+                            if json_name == "DeviceINFO" and param_name == "SeriesNumber":
+                                series_parts = [p.strip() for p in str(param_value).split(',')]
+                                parameters[param_name] = "".join(series_parts)
+                            # 處理需要設為空值的參數
+                            elif json_name == "DeviceINFO" and param_name.lower() in ["fwversion", "manufacturedate", "calibrationdate"]:
+                                parameters[param_name] = ""
+                            else:
+                                parameters[param_name] = str(param_value).strip()
+                    
+                    # 確保 DeviceINFO 中的必要參數存在
+                    if json_name == "DeviceINFO":
+                        required_empty_params = ["ManufactureDate", "CalibrationDate"]
+                        for param_name in required_empty_params:
+                            if param_name not in parameters:
+                                parameters[param_name] = ""
+                
+                # 檢查參數是否為空
+                if not parameters:
+                    raise ValueError(f"{json_name} 的參數為空")
                 
                 # 檢查 JSON 內容
                 is_valid, error_msg = check_json_content(json_name, parameters)
                 if not is_valid:
                     error_messages.append(error_msg)
-                    print(f"{json_name}.json NG")
+                    print(f"{json_name}.json NG: {error_msg}")
                     continue
-                
-                # 特殊處理 DeviceINFO 的 SeriesNumber
-                if json_name == "DeviceINFO" and "SeriesNumber" in parameters:
-                    raw_series = str(parameters["SeriesNumber"])
-                    series_parts = [p.strip() for p in raw_series.split(',')]
-                    parameters["SeriesNumber"] = "".join(series_parts)
                 
                 # 設定輸出目錄
                 if json_name in ["OutputProtection", "ProtectReplyFile"]:
@@ -210,13 +310,16 @@ def convert_xlsx_to_json(excel_a_path: str, excel_b_path: str, device_name: str,
                 check_and_fix_scientific_notation(json_path)
                 
             except Exception as e:
-                error_messages.append(f"處理 {json_name} 時發生錯誤: {str(e)}")
-                print(f"{json_name}.json NG")
+                error_msg = f"處理 {json_name} 時發生錯誤: {str(e)}"
+                error_messages.append(error_msg)
+                print(error_msg)
+                continue  # 繼續處理下一個檔案
         
         if error_messages:
             raise ValueError("\n".join(error_messages))
                 
     except Exception as e:
+        print(f"轉換過程發生錯誤: {str(e)}")
         raise ValueError(f"轉換過程發生錯誤: {str(e)}")
 
 def main():
