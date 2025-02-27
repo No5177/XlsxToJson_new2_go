@@ -1,0 +1,36 @@
+# 依賴項目目錄
+node_modules/
+venv/
+.env/
+__pycache__/
+
+# 構建輸出
+dist/
+build/
+out/
+
+# IDE 和編輯器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 日誌文件
+*.log
+
+# 環境變量文件
+.env
+.env.local
+.env.*.local
+
+# 緩存文件
+.cache/
+.npm/
+
+# 測試覆蓋率報告
+coverage/
+
+# 臨時文件
+tmp/
+temp/ 

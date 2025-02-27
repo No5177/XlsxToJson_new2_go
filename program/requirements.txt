@@ -1,26 +1,26 @@
-# GUI 相關套件
-tkinter  # Python 內建，不需要額外安裝
+# GUI related packages
 
-# Excel 處理相關套件
+
+# Excel processing related packages
 pandas>=2.0.0
 openpyxl>=3.1.0
-et_xmlfile>=1.1.0  # openpyxl 的依賴
+et_xmlfile>=1.1.0  # Dependency for openpyxl
 
-# 基礎套件
-numpy==2.2.1  # pandas 的依賴
-python-dateutil==2.9.0.post0  # pandas 的依賴
-pytz==2024.2  # pandas 的依賴
-tzdata==2024.2  # 時區數據
-six==1.17.0  # python-dateutil 的依賴
+# Basic packages
+numpy==2.2.1  # Dependency for pandas
+python-dateutil==2.9.0.post0  # Dependency for pandas
+pytz==2024.2  # Dependency for pandas
+tzdata==2024.2  # Time zone data
+six==1.17.0  # Dependency for python-dateutil
 
-# 打包相關套件（僅開發時需要）
+# Packaging related packages (only needed during development)
 pyinstaller==6.11.1
 pyinstaller-hooks-contrib==2024.11
-altgraph==0.17.4  # pyinstaller 的依賴
+altgraph==0.17.4  # Dependency for pyinstaller
 
-# 測試相關套件（僅開發時需要）
+# Testing related packages (only needed during development)
 pytest==8.1.1
 
-# 其他
-setuptools==75.7.0  # 基礎工具
-packaging==24.2  # 依賴管理
+# Others
+setuptools==75.7.0  # Basic tools
+packaging==24.2  # Dependency management
