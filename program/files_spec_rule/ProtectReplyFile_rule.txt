@@ -1,3 +1,0 @@
-# ProtectReplyFile.json生成規則
-# Excel A - 工作表："LTRp 保護回復檔一覽表"
-LTRp 保護回復檔一覽表,7,B,C

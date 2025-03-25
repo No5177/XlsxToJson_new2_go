@@ -1,6 +1,5 @@
 # GUI related packages
 
-
 # Excel processing related packages
 pandas>=2.0.0
 openpyxl>=3.1.0
@@ -23,4 +22,4 @@ pytest==8.1.1
 
 # Others
 setuptools==75.7.0  # Basic tools
-packaging==24.2  # Dependency management
+packaging==24.2  # Dependency management 

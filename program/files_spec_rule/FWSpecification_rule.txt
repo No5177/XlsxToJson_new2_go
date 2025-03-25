@@ -1,3 +1,0 @@
-# FWSpecification.json生成規則
-# Excel A - 工作表："LTRp 規格檔一覽表"
-LTRp 規格檔一覽表,7,B,C

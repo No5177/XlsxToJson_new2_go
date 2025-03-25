@@ -2,23 +2,76 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading  # 用於創建非阻塞的工作線程
 import os
-import subprocess
+import sys
+import io
 import pandas as pd
+from pathlib import Path
+
+# 确保能够导入上级目录的模块
+parent_dir = str(Path(__file__).resolve().parent.parent)
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+# 直接导入 xlsx_to_json 模块
+import xlsx_to_json
+
+# 資源路徑處理函數，用於打包後正確讀取資源檔案
+def resource_path(relative_path):
+    """獲取資源的絕對路徑，兼容開發環境和打包後的執行環境"""
+    try:
+        # PyInstaller 和 Nuitka 打包後的臨時目錄
+        base_path = getattr(sys, '_MEIPASS', None)
+        if base_path is None:
+            # 嘗試 Nuitka 特有的環境變量
+            base_path = os.environ.get('NUITKA_ONEFILE_PARENT', None)
+            
+        if base_path is None:
+            # 開發環境
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    except Exception:
+        # 如果上述方法都失敗，使用當前目錄
+        base_path = os.path.abspath(".")
+        
+    return os.path.join(base_path, relative_path)
 
 class WorkerThread(threading.Thread):
     """工作線程類，用於執行耗時的文件轉換操作"""
-    def __init__(self, callback, cmd):
+    def __init__(self, callback, func, *args, **kwargs):
         super().__init__()
         self.callback = callback  # 完成後的回調函數
-        self.cmd = cmd  # 要執行的命令
+        self.func = func  # 要執行的函数
+        self.args = args
+        self.kwargs = kwargs
         
     def run(self):
-        """執行命令並通過回調返回結果"""
+        """執行函數並通過回調返回結果"""
         try:
-            result = subprocess.run(self.cmd, shell=True, capture_output=True, text=True)
-            self.callback(result)
+            # 捕获标准输出和错误
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+            
+            try:
+                self.func(*self.args, **self.kwargs)
+                success = True
+            except Exception as e:
+                success = False
+                error = str(e)
+            finally:
+                # 恢复标准输出和错误
+                sys.stdout = original_stdout
+                sys.stderr = original_stderr
+            
+            if success:
+                self.callback(True, stdout_capture.getvalue(), None)
+            else:
+                self.callback(False, stdout_capture.getvalue(), stderr_capture.getvalue() or error)
         except Exception as e:
-            self.callback(None, str(e))
+            self.callback(False, "", str(e))
 
 class XlsxToJsonGUI:
     """Excel 轉 JSON 的圖形界面類"""
@@ -39,12 +92,8 @@ class XlsxToJsonGUI:
         self._messagebox_showerror = messagebox_showerror if messagebox_showerror is not None else messagebox.showerror
         self._messagebox_showinfo = messagebox_showinfo if messagebox_showinfo is not None else messagebox.showinfo
         
-        # 自動設置 xlsx_to_json.py 的路徑
-        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        default_py_path = os.path.join(current_dir, "xlsx_to_json.py")
-        
         # 搜尋 Excel 檔案
-        root_dir = os.path.dirname(current_dir)  # XlsxToJson 資料夾路徑
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # XlsxToJson 資料夾路徑
         excel_a_path = ""
         excel_b_path = ""
         
@@ -62,21 +111,18 @@ class XlsxToJsonGUI:
             print(f"搜尋 Excel 檔案時發生錯誤: {e}")
         
         # 初始化路徑和設備名稱變量
-        self._py_Path = default_py_path if os.path.exists(default_py_path) else ""
         self._xlsx_Path_A = excel_a_path  # Excel A 路徑
         self._xlsx_Path_B = excel_b_path  # Excel B 路徑
         self._device_name = ""
         self._output_path = ""
         
         # 創建 GUI 變量
-        self.py_Path = self._string_var_class(value=self._py_Path)
         self.xlsx_Path_A = self._string_var_class(value=self._xlsx_Path_A)
         self.xlsx_Path_B = self._string_var_class(value=self._xlsx_Path_B)
         self.DeviceName = self._string_var_class(value=self._device_name)
         self.Output_Path = self._string_var_class(value=self._output_path)
         
         # 設置變量追踪（當值改變時更新內部變量）
-        self.py_Path.trace_add("write", lambda *args: setattr(self, '_py_Path', self.py_Path.get()))
         self.xlsx_Path_A.trace_add("write", lambda *args: setattr(self, '_xlsx_Path_A', self.xlsx_Path_A.get()))
         self.xlsx_Path_B.trace_add("write", lambda *args: setattr(self, '_xlsx_Path_B', self.xlsx_Path_B.get()))
         self.DeviceName.trace_add("write", lambda *args: setattr(self, '_device_name', self.DeviceName.get()))
@@ -84,9 +130,22 @@ class XlsxToJsonGUI:
         
         # 設置窗口圖標
         try:
-            icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon_image', 'icon_517.ico')
+            # 先嘗試使用 resource_path 函數查找 icon.ico
+            icon_path = resource_path("icon.ico")
             if os.path.exists(icon_path):
                 self.root.iconbitmap(icon_path)
+            else:
+                # 後備方案：嘗試在 icon_image 目錄中查找
+                icon_path = resource_path(os.path.join("icon_image", "icon_517.ico"))
+                if os.path.exists(icon_path):
+                    self.root.iconbitmap(icon_path)
+                else:
+                    # 再次後備：使用舊的路徑方式查找
+                    icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon_image', 'icon_517.ico')
+                    if os.path.exists(icon_path):
+                        self.root.iconbitmap(icon_path)
+                    else:
+                        print("Warning: Could not find any icon file.")
         except Exception as e:
             print(f"Warning: Could not load icon: {e}")
         
@@ -103,66 +162,49 @@ class XlsxToJsonGUI:
         row_pady = 5
         
         # 創建各種輸入欄位和按鈕
-        # Python 文件選擇
-        ttk.Label(main_frame, text="指定python檔", width=label_width).grid(
-            row=0, column=0, sticky=tk.W, pady=row_pady)
-        ttk.Entry(main_frame, textvariable=self.py_Path, width=entry_width).grid(
-            row=0, column=1, padx=entry_padx, sticky=tk.EW)
-        ttk.Button(main_frame, text="瀏覽", command=self.select_py_file, width=button_width).grid(
-            row=0, column=2, padx=button_padx)
-        
         # Excel file A selection
         ttk.Label(main_frame, text="指定Excel檔案(規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表)", width=label_width).grid(
-            row=1, column=0, sticky=tk.W, pady=row_pady)
+            row=0, column=0, sticky=tk.W, pady=row_pady)
         ttk.Entry(main_frame, textvariable=self.xlsx_Path_A, width=entry_width).grid(
-            row=1, column=1, padx=entry_padx, sticky=tk.EW)
+            row=0, column=1, padx=entry_padx, sticky=tk.EW)
         ttk.Button(main_frame, text="瀏覽", command=self.select_xlsx_file_A, width=button_width).grid(
-            row=1, column=2, padx=button_padx)
+            row=0, column=2, padx=button_padx)
         
         # Excel file B selection
         ttk.Label(main_frame, text="指定Excel檔案(控制檔一覽表)", width=label_width).grid(
-            row=2, column=0, sticky=tk.W, pady=row_pady)
+            row=1, column=0, sticky=tk.W, pady=row_pady)
         ttk.Entry(main_frame, textvariable=self.xlsx_Path_B, width=entry_width).grid(
-            row=2, column=1, padx=entry_padx, sticky=tk.EW)
+            row=1, column=1, padx=entry_padx, sticky=tk.EW)
         ttk.Button(main_frame, text="瀏覽", command=self.select_xlsx_file_B, width=button_width).grid(
-            row=2, column=2, padx=button_padx)
+            row=1, column=2, padx=button_padx)
         
         # Device name input
         ttk.Label(main_frame, text="指定設備型號", width=label_width).grid(
-            row=3, column=0, sticky=tk.W, pady=row_pady)
+            row=2, column=0, sticky=tk.W, pady=row_pady)
         self.device_combobox = ttk.Combobox(main_frame, textvariable=self.DeviceName, width=entry_width)
-        self.device_combobox.grid(row=3, column=1, padx=entry_padx, sticky=tk.EW)
+        self.device_combobox.grid(row=2, column=1, padx=entry_padx, sticky=tk.EW)
         ttk.Button(main_frame, text="讀取型號", command=self.load_device_names, width=button_width).grid(
-            row=3, column=2, padx=button_padx)
+            row=2, column=2, padx=button_padx)
         
         # Output path selection
         ttk.Label(main_frame, text="指定產出檔案路徑", width=label_width).grid(
-            row=4, column=0, sticky=tk.W, pady=row_pady)
+            row=3, column=0, sticky=tk.W, pady=row_pady)
         ttk.Entry(main_frame, textvariable=self.Output_Path, width=entry_width).grid(
-            row=4, column=1, padx=entry_padx, sticky=tk.EW)
+            row=3, column=1, padx=entry_padx, sticky=tk.EW)
         ttk.Button(main_frame, text="瀏覽", command=self.select_output_path, width=button_width).grid(
-            row=4, column=2, padx=button_padx)
+            row=3, column=2, padx=button_padx)
         
         # Command output display
-        ttk.Label(main_frame, text="命令執行狀態", width=label_width).grid(row=5, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="執行狀態", width=label_width).grid(row=4, column=0, sticky=tk.W, pady=5)
         self.cmd_output = tk.Text(main_frame, height=10, width=70)
-        self.cmd_output.grid(row=5, column=1, columnspan=2, padx=entry_padx, pady=5)
+        self.cmd_output.grid(row=4, column=1, columnspan=2, padx=entry_padx, pady=5)
         
         # 修改进度条位置和大小
         self.progress_bar = ttk.Progressbar(main_frame, mode='determinate')
-        self.progress_bar.grid(row=6, column=0, columnspan=3, sticky="ew", padx=(0, 5))  # 調整對齊方式
+        self.progress_bar.grid(row=5, column=0, columnspan=3, sticky="ew", padx=(0, 5))  # 調整對齊方式
         
         # Generate button (移到进度条下方)
-        ttk.Button(main_frame, text="所有參數檔生成", command=self.generate_fw_spec).grid(row=7, column=1, pady=20)
-        
-    def select_py_file(self):
-        """選擇 Python 文件的對話框"""
-        filename = filedialog.askopenfilename(
-            title="選擇Python檔案",
-            filetypes=[("Python files", "*.py")]
-        )
-        if filename:
-            self.py_Path.set(filename)
+        ttk.Button(main_frame, text="所有參數檔生成", command=self.generate_fw_spec).grid(row=6, column=1, pady=20)
     
     def select_xlsx_file_A(self):
         filename = filedialog.askopenfilename(
@@ -218,76 +260,85 @@ class XlsxToJsonGUI:
     
     def validate_inputs(self):
         """驗證輸入"""
-        # ... 其他驗證保持不變 ...
+        # 驗證Excel檔案A
+        if not self.xlsx_Path_A.get():
+            self._messagebox_showerror("錯誤", "請選擇Excel檔案A (規格檔&保護檔&保護回復檔&資訊檔)")
+            return False
+            
+        # 驗證Excel檔案B
+        if not self.xlsx_Path_B.get():
+            self._messagebox_showerror("錯誤", "請選擇Excel檔案B (控制檔)")
+            return False
         
         # 驗證設備型號
         if not self.DeviceName.get():
-            messagebox.showerror("錯誤", "請選擇設備型號")
+            self._messagebox_showerror("錯誤", "請選擇設備型號")
             return False
         
-        # ... 其他驗證保持不變 ...
+        # 驗證輸出路徑
+        if not self.Output_Path.get():
+            self._messagebox_showerror("錯誤", "請選擇輸出目錄")
+            return False
+            
         return True
     
     def generate_fw_spec(self):
         """生成固件規格文件的主要函數"""
         try:
             # 獲取並清理輸入值
-            py_path = str(self.py_Path.get()).strip()
             xlsx_path_a = str(self.xlsx_Path_A.get()).strip()
             xlsx_path_b = str(self.xlsx_Path_B.get()).strip()
             device_name = str(self.DeviceName.get()).strip()
             output_path = str(self.Output_Path.get()).strip()
             
             # 驗證輸入
-            if not all([py_path, xlsx_path_a, xlsx_path_b, device_name, output_path]):
-                self._messagebox_showerror("錯誤", "請填寫所有必要欄位")
+            if not self.validate_inputs():
                 return
             
-            # 重置進度條
+            # 重置進度條和輸出文字
             self.progress_bar['value'] = 0
+            self.cmd_output.delete('1.0', tk.END)
+            self.cmd_output.insert('1.0', "開始處理中...\n")
             
-            # 使用絕對路徑
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # 轉換為絕對路徑
+            xlsx_path_a = os.path.abspath(xlsx_path_a)
+            xlsx_path_b = os.path.abspath(xlsx_path_b)
+            output_path = os.path.abspath(output_path)
             
-            # Convert paths to absolute paths
-            py_NewPath = os.path.abspath(py_path)
-            xlsx_NewPath_A = os.path.abspath(xlsx_path_a)
-            xlsx_NewPath_B = os.path.abspath(xlsx_path_b)
-            Output_NewPath = os.path.abspath(output_path)
+            # 更新進度條到 25%
+            self.progress_bar['value'] = 25
+            self.root.update_idletasks()
             
-            # 構建命令時使用 python 而不是 python3
-            cmd = f'python "{py_NewPath}" "{xlsx_NewPath_A}" "{xlsx_NewPath_B}" "{device_name}" "{Output_NewPath}"'
+            # 定義完成處理的回調函數
+            def process_complete(success, stdout, stderr):
+                """處理完成後的回調函數"""
+                if not success:
+                    print(f"Error: {stderr}")  # 添加命令行輸出
+                    self.cmd_output.delete('1.0', tk.END)
+                    self.cmd_output.insert('1.0', f"錯誤: {stderr}")
+                    self._messagebox_showerror("錯誤", f"執行時發生錯誤:\n{stderr}")
+                    self.progress_bar['value'] = 0
+                else:
+                    print("Success")  # 添加命令行輸出
+                    self.cmd_output.delete('1.0', tk.END)
+                    self.cmd_output.insert('1.0', stdout)
+                    self._messagebox_showinfo("成功", "所有參數檔已成功產生")
+                    self.progress_bar['value'] = 100
+            
+            # 創建並啟動工作線程，直接呼叫 xlsx_to_json 模組的功能
+            worker = WorkerThread(
+                process_complete, 
+                xlsx_to_json.convert_xlsx_to_json,
+                xlsx_path_a,
+                xlsx_path_b,
+                device_name,
+                output_path
+            )
+            worker.start()
             
             # 更新進度條到 50%
             self.progress_bar['value'] = 50
             self.root.update_idletasks()
-            
-            # 定義完成處理的回調函數
-            def process_complete(result, error=None):
-                """處理完成後的回調函數"""
-                if error:
-                    print(f"Error: {error}")  # 添加命令行輸出
-                    self.cmd_output.delete('1.0', tk.END)
-                    self.cmd_output.insert('1.0', f"錯誤: {error}")
-                    self._messagebox_showerror("錯誤", f"執行時發生錯誤:\n{error}")
-                    self.progress_bar['value'] = 0
-                elif result.returncode == 0:
-                    print("Success")  # 添加命令行輸出
-                    self.cmd_output.delete('1.0', tk.END)
-                    self.cmd_output.insert('1.0', result.stdout)
-                    self._messagebox_showinfo("成功", "所有參數檔已成功產生")
-                    self.progress_bar['value'] = 100
-                else:
-                    print(f"Error output: {result.stderr}")  # 添加命令行輸出
-                    error_message = result.stderr if result.stderr else result.stdout
-                    self.cmd_output.delete('1.0', tk.END)
-                    self.cmd_output.insert('1.0', error_message)
-                    self._messagebox_showerror("錯誤", f"執行失敗:\n{error_message}")
-                    self.progress_bar['value'] = 0
-            
-            # 創建並啟動工作線程
-            worker = WorkerThread(process_complete, cmd)
-            worker.start()
                 
         except Exception as e:
             error_msg = str(e)
