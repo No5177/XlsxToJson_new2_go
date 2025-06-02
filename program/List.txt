@@ -1,0 +1,4 @@
+工作管理員 名稱
+工作管理員 icon
+windows工作列 icon
+FWControl.json，   "REVPmin": "-2000",要改成數值

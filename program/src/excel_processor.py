@@ -96,6 +96,18 @@ class ExcelProcessor:
                     if isinstance(param_value, float):
                         str_val = f"{param_value:.10f}".rstrip('0').rstrip('.')
                         parameters[json_key] = int(str_val) if str_val.isdigit() else float(str_val)
+                    elif isinstance(param_value, str):
+                        try:
+                            # 嘗試將字串轉換為浮點數，以處理小數和負號
+                            converted_val = float(param_value)
+                            # 如果轉換後的浮點數等於其整數形式，則轉換為整數
+                            if converted_val == int(converted_val):
+                                parameters[json_key] = int(converted_val)
+                            else:
+                                parameters[json_key] = converted_val
+                        except ValueError:
+                            # 如果字串無法轉換為有效數字，則保留為字串
+                            parameters[json_key] = param_value
                     else:
                         parameters[json_key] = param_value
                 else:

@@ -26,8 +26,8 @@ def resource_path(relative_path):
             base_path = os.environ.get('NUITKA_ONEFILE_PARENT', None)
             
         if base_path is None:
-            # 開發環境
-            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # 開發環境或打包後的執行檔所在目錄
+            base_path = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
     except Exception:
         # 如果上述方法都失敗，使用當前目錄
         base_path = os.path.abspath(".")
@@ -93,20 +93,46 @@ class XlsxToJsonGUI:
         self._messagebox_showinfo = messagebox_showinfo if messagebox_showinfo is not None else messagebox.showinfo
         
         # 搜尋 Excel 檔案
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # XlsxToJson 資料夾路徑
+        # 獲取執行檔所在目錄
+        if getattr(sys, 'frozen', False):
+            # 打包後的環境
+            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        else:
+            # 開發環境
+            exe_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
         excel_a_path = ""
         excel_b_path = ""
         
         # 搜尋 Excel 檔案
         try:
-            for file in os.listdir(root_dir):
+            # 首先在執行檔所在目錄搜尋
+            for file in os.listdir(exe_dir):
                 if file.endswith('.xlsx'):
                     # 搜尋 Excel A
                     if file.startswith('POCB-V100A 規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表'):
-                        excel_a_path = os.path.join(root_dir, file)
+                        excel_a_path = os.path.join(exe_dir, file)
                     # 搜尋 Excel B
                     elif file.startswith('POCB-V100A 控制檔一覽表'):
-                        excel_b_path = os.path.join(root_dir, file)
+                        excel_b_path = os.path.join(exe_dir, file)
+            
+            # 如果在執行檔所在目錄沒找到，嘗試在其他常見位置搜尋
+            if not excel_a_path or not excel_b_path:
+                other_dirs = [
+                    os.path.join(exe_dir, "excel"),
+                    os.path.join(exe_dir, "data"),
+                    os.path.expanduser("~/Documents"),
+                    os.path.abspath(".")
+                ]
+                
+                for dir_path in other_dirs:
+                    if os.path.exists(dir_path):
+                        for file in os.listdir(dir_path):
+                            if file.endswith('.xlsx'):
+                                if file.startswith('POCB-V100A 規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表') and not excel_a_path:
+                                    excel_a_path = os.path.join(dir_path, file)
+                                elif file.startswith('POCB-V100A 控制檔一覽表') and not excel_b_path:
+                                    excel_b_path = os.path.join(dir_path, file)
         except Exception as e:
             print(f"搜尋 Excel 檔案時發生錯誤: {e}")
         

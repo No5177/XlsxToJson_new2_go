@@ -13,29 +13,47 @@ from src.excel_processor import ExcelProcessor
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 def get_resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller"""
+    """獲取資源的絕對路徑，兼容開發環境和打包後的執行環境"""
     try:
-        # Get the base path for resources
+        # 檢查是否是絕對路徑
+        if os.path.isabs(relative_path) and os.path.exists(relative_path):
+            return relative_path
+            
+        # 獲取資源基礎路徑
         if getattr(sys, 'frozen', False):
-            # Running in PyInstaller bundle
-            base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+            # 在打包的環境中運行
+            if hasattr(sys, '_MEIPASS'):
+                # PyInstaller
+                base_path = sys._MEIPASS
+            else:
+                # Nuitka
+                base_path = os.path.dirname(sys.executable)
+                # 嘗試Nuitka特有的環境變量
+                if 'NUITKA_ONEFILE_PARENT' in os.environ:
+                    base_path = os.environ['NUITKA_ONEFILE_PARENT']
         else:
-            # Running in development
+            # 在開發環境中運行
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             
-        # Convert relative_path to absolute path
-        abs_path = os.path.abspath(relative_path)
-        if os.path.exists(abs_path):
-            return abs_path
+        # 從基礎路徑構建絕對路徑
+        resolved_path = os.path.join(base_path, relative_path)
+        if os.path.exists(resolved_path):
+            return resolved_path
             
-        # Try with the base path
-        base_path_file = os.path.join(base_path, relative_path)
-        if os.path.exists(base_path_file):
-            return base_path_file
+        # 嘗試直接在執行檔目錄查找
+        exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+        exe_dir_path = os.path.join(exe_dir, relative_path)
+        if os.path.exists(exe_dir_path):
+            return exe_dir_path
             
-        raise FileNotFoundError(f"Resource not found: {relative_path}")
+        # 最後嘗試在當前工作目錄
+        cwd_path = os.path.join(os.getcwd(), relative_path)
+        if os.path.exists(cwd_path):
+            return cwd_path
+            
+        raise FileNotFoundError(f"找不到資源: {relative_path}")
     except Exception as e:
-        print(f"Error while locating resource {relative_path}: {str(e)}")
+        print(f"定位資源 {relative_path} 時出錯: {str(e)}")
         raise
 
 def validate_device_name(name: str) -> Tuple[bool, str]:
