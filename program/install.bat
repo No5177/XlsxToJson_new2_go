@@ -29,21 +29,26 @@ if not exist "dist\data" (
 )
 
 REM 執行 Nuitka 打包命令
+REM --windows-disable-console 已註解掉
 nuitka src/gui.py ^
   --standalone ^
   --onefile ^
   --enable-plugin=tk-inter ^
-  --windows-disable-console ^
   --windows-icon-from-ico=icon.ico ^
+  --windows-disable-console ^
+  --windows-company-name="ThinkPower" ^
+  --windows-product-name="ThinkRP Spec Excel to JSON Converter" ^
+  --windows-file-description="ThinkRP Spec Excel to JSON Converter" ^
+  --windows-product-version="1.0.0.3" ^
+  --windows-file-version="1.0.0.3" ^
   --include-data-file=icon.ico=icon.ico ^
   --include-module=xlsx_to_json ^
   --include-data-dir=icon_image=icon_image ^
   --include-data-file=xlsx_to_json.py=xlsx_to_json.py ^
   --follow-imports ^
   --output-dir=dist ^
-  --output-filename=XlsxToJson.exe ^
+  --output-filename=ThinkRP Spec Excel to JSON Converter.exe ^
   --nofollow-import-to=test_gui,test_json_generation,debug_excel,src.test_gui,src.test_json_generation,src.debug_excel ^
-  --nofollow-import-to=pandas,numpy,openpyxl ^
   --include-package=pandas ^
   --include-package=openpyxl ^
   --include-package=numpy ^
