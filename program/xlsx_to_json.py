@@ -61,10 +61,6 @@ def validate_device_name(name: str) -> Tuple[bool, str]:
     if not name:
         return False, "設備名稱不能為空"
     
-    pattern = r'^TPT-[0-9A-Z]+$'
-    if not re.match(pattern, name):
-        return False, "無效的設備名稱格式。預期格式: TPT-[數字/字母]"
-    
     # Basic format validation passed
     return True, ""
 
@@ -285,15 +281,28 @@ def convert_xlsx_to_json(excel_a_path: str, excel_b_path: str, device_name: str,
                         if isinstance(param_value, (int, float)):
                             parameters[param_name] = param_value
                         else:
+                            param_str = str(param_value).strip()
+                            
                             # 特殊處理 SeriesNumber
                             if json_name == "DeviceINFO" and param_name == "SeriesNumber":
-                                series_parts = [p.strip() for p in str(param_value).split(',')]
+                                series_parts = [p.strip() for p in param_str.split(',')]
                                 parameters[param_name] = "".join(series_parts)
                             # 處理需要設為空值的參數
                             elif json_name == "DeviceINFO" and param_name.lower() in ["fwversion", "manufacturedate", "calibrationdate"]:
                                 parameters[param_name] = ""
                             else:
-                                parameters[param_name] = str(param_value).strip()
+                                # 使用和 Excel A 相同的數值轉換邏輯
+                                try:
+                                    # 嘗試將字串轉換為浮點數，以處理小數和負號
+                                    converted_val = float(param_str)
+                                    # 如果轉換後的浮點數等於其整數形式，則轉換為整數
+                                    if converted_val == int(converted_val):
+                                        parameters[param_name] = int(converted_val)
+                                    else:
+                                        parameters[param_name] = converted_val
+                                except ValueError:
+                                    # 如果字串無法轉換為有效數字，則保留為字串
+                                    parameters[param_name] = param_str
                     
                     # 確保 DeviceINFO 中的必要參數存在
                     if json_name == "DeviceINFO":
