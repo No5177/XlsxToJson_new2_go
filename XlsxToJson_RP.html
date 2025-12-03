@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XlsxToJson_RP_SPEC 配置生成工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .card { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        input[type="file"]::file-selector-button {
+            @apply bg-blue-500 text-white px-4 py-2 border-0 rounded-lg cursor-pointer hover:bg-blue-600 transition duration-150;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-2">設備配置檔案生成工具</h1>
+
+    <!-- 檔案匯入區 -->
+    <div class="card bg-white p-6 rounded-xl mb-6">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">I. 檔案匯入與型號選擇</h2>
+
+        <div class="space-y-4">
+            <!-- 1. 規格檔 (必填標示) -->
+            <label class="block">
+                <span class="text-gray-700 font-medium">1. 指定 規格檔 (.xlsx) 路徑 <span class="text-red-500">*</span> (檔案驗證: POCB-V100A 規格檔...)</span>
+                <input type="file" id="specFileInput" accept=".xlsx" class="mt-1 block w-full text-sm text-gray-500" />
+            </label>
+
+            <!-- 2. 控制檔 (必填標示) -->
+            <label class="block">
+                <span class="text-gray-700 font-medium">2. 指定 控制檔 (.xlsx) 路徑 <span class="text-red-500">*</span> (檔案驗證: POCB-V100A 控制檔...)</span>
+                <input type="file" id="ctrlFileInput" accept=".xlsx" class="mt-1 block w-full text-sm text-gray-500" />
+            </label>
+        </div>
+
+        <div class="mt-6 flex flex-col md:flex-row md:items-end md:space-x-4 space-y-4 md:space-y-0 border-t pt-4">
+            <!-- 3. 讀取型號按鈕 -->
+            <button id="readModelBtn" class="w-full md:w-auto bg-green-500 text-white font-semibold py-2 px-4 rounded-xl hover:bg-green-600 transition duration-150 shadow-md flex-shrink-0">
+                讀取型號
+            </button>
+            
+            <!-- 3. 設備輸出型號選擇 (預設為禁用) -->
+            <label class="block flex-grow">
+                <span class="text-gray-700 font-medium">3. 選擇設備輸出型號</span>
+                <!-- 已更新：加入 disabled:bg-gray-200 和 disabled:text-gray-500 -->
+                <select id="modelSelect" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 bg-gray-50 disabled:bg-gray-200 disabled:text-gray-500" disabled>
+                    <option value="" disabled selected>請先讀取規格檔以載入型號</option>
+                </select>
+            </label>
+        </div>
+
+        <!-- 4. 指定產出檔案路徑 (模擬/忽略) -->
+        <div class="mt-4">
+            <label class="block">
+                <span class="text-gray-700 font-medium">4. 指定產出檔案路徑 (瀏覽器會直接下載 ZIP 檔案)</span>
+                <input type="text" value="[瀏覽器下載目錄]" disabled class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm bg-gray-100 p-2 cursor-not-allowed">
+            </label>
+        </div>
+    </div>
+
+    <!-- 操作控制區 -->
+    <div class="card bg-white p-6 rounded-xl mb-6">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">II. 檔案生成操作</h2>
+        <button id="generateBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 transition duration-150 shadow-lg disabled:opacity-50" disabled>
+            5. 執行生成檔案 (ZIP)
+        </button>
+    </div>
+
+    <!-- 狀態與紀錄區 -->
+    <div class="card bg-gray-800 text-white p-6 rounded-xl">
+        <h2 class="text-xl font-semibold mb-3">III. 狀態與紀錄區 (Log View)</h2>
+        <div id="logView" class="h-64 overflow-y-auto p-3 text-sm bg-gray-900 rounded-lg whitespace-pre-wrap">
+            工具已載入。請選擇規格檔與控制檔，然後點擊「讀取型號」。
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 全域變數與初始化 ---
+    let specFile = null;
+    let ctrlFile = null;
+    // deviceModels 僅用於儲存型號列表，不再儲存欄位索引
+    let deviceModels = []; 
+
+    const logView = document.getElementById('logView');
+    const specFileInput = document.getElementById('specFileInput');
+    const ctrlFileInput = document.getElementById('ctrlFileInput');
+    const readModelBtn = document.getElementById('readModelBtn');
+    const modelSelect = document.getElementById('modelSelect');
+    const generateBtn = document.getElementById('generateBtn');
+
+    // 核心工作表名稱對應
+    const SHEET_MAP = {
+        "OutputProtection.json": { sheet: "LTRp 保護檔一覽表", file: "specFile", fileType: "規格檔" },
+        "ProtectReplyFile.json": { sheet: "LTRp 保護回復檔一覽表", file: "specFile", fileType: "規格檔" },
+        "DeviceINFO.json": { sheet: "LTRp 資訊檔一覽表", file: "specFile", fileType: "規格檔" },
+        "FWSpecification.json": { sheet: "LTRp 規格檔一覽表", file: "specFile", fileType: "規格檔" },
+        // 注意: 將 FWControl.json 的檔案類型設為 "控制檔"
+        "FWControl.json": { sheet: "工作表1", file: "ctrlFile", fileType: "控制檔" } 
+    };
+
+    // CalibrationParemeter.json 固定內容
+    const CALIBRATION_JSON = {
+        "Gcvadc": 1, "Ocvadc": 0, "Gdvadc": 1, "Odvadc": 0,
+        "Gccadc": 1, "Occadc": 0, "Gdcadc": 1, "Odcdac": 0,
+        "Grvadc": 1, "Orvadc": 0, "Gcvdac": 1, "Ocvdac": 0,
+        "Gdvdac": 1, "Odvdac": 0, "Gccdac": 1, "Occdac": 0,
+        "Gdcdac": 1, "Odcdac": 0
+    };
+
+    const ROW_INDEX_MODELS = 3; // 設備型號位於 Row 4 (R=3)
+    const START_COL_INDEX = 5; // 設備型號從 Column 6 (F欄, C=5) 開始
+
+    /**
+     * @description 將訊息記錄到狀態區並滾動到底部
+     * @param {string} message 要記錄的訊息
+     * @param {string} type 訊息類型 ('info', 'success', 'error')
+     */
+    function log(message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        let prefix = '';
+        if (type === 'success') prefix = '✅ 成功: ';
+        else if (type === 'error') prefix = '❌ 錯誤: ';
+        else prefix = '💡 資訊: ';
+        
+        logView.innerHTML += `[${timestamp}] ${prefix}${message}\n`;
+        logView.scrollTop = logView.scrollHeight;
+    }
+
+    /**
+     * @description 驗證檔案名稱是否符合規格
+     * @param {File} file 檔案物件
+     * @param {string} type 檔案類型 ('spec' 或 'ctrl')
+     * @returns {boolean} 驗證結果
+     */
+    function validateFileName(file, type) {
+        if (!file) return false;
+        const name = file.name;
+        let isValid = false;
+        let requiredPrefix = '';
+
+        if (type === 'spec') {
+            requiredPrefix = 'POCB-V100A 規格檔 & 保護檔 & 保護回復檔 & 資訊檔一覽表';
+            isValid = name.startsWith(requiredPrefix);
+        } else if (type === 'ctrl') {
+            requiredPrefix = 'POCB-V100A 控制檔一覽表';
+            isValid = name.startsWith(requiredPrefix);
+        }
+
+        if (!isValid) {
+            log(`${file.name} 檔名驗證失敗。必須以 「${requiredPrefix}」開頭。`, 'error');
+        }
+        return isValid;
+    }
+
+    /**
+     * @description 讀取 Excel 檔案並取得工作簿 (Workbook)
+     * @param {File} file 檔案物件
+     * @returns {Promise<Object>} XLSX 工作簿物件
+     */
+    function readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    // 設定 cellText: false 以嚴格保留原始數值類型和精度 (例如: 1.00)
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellNF: false, cellText: false }); 
+                    resolve(workbook);
+                } catch (error) {
+                    reject(new Error(`無法解析 Excel 檔案：${error.message}`));
+                }
+            };
+            reader.onerror = (error) => reject(new Error(`檔案讀取失敗: ${error.message}`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    /**
+     * @description 讀取規格檔並解析設備型號，填充下拉選單
+     */
+    async function readModels() {
+        if (!specFile) {
+            log('請先選擇規格檔。', 'error');
+            return;
+        }
+
+        if (!validateFileName(specFile, 'spec')) {
+            return;
+        }
+
+        log(`開始讀取規格檔: ${specFile.name}，解析設備型號...`);
+        readModelBtn.disabled = true;
+        generateBtn.disabled = true;
+        modelSelect.disabled = true; // 讀取型號過程中禁用下拉選單
+
+        try {
+            const workbook = await readExcelFile(specFile);
+            const sheetName = SHEET_MAP["FWSpecification.json"].sheet; // "LTRp 規格檔一覽表"
+            const worksheet = workbook.Sheets[sheetName];
+
+            if (!worksheet) {
+                throw new Error(`規格檔中找不到工作表: ${sheetName}`);
+            }
+
+            // 清空舊的型號
+            modelSelect.innerHTML = '<option value="" disabled selected>請先讀取規格檔以載入型號</option>';
+            deviceModels = []; // 重置為列表
+
+            let colIndex = START_COL_INDEX;
+            
+            // 讀取 Header (從 Column F 開始)
+            while (true) {
+                const cellAddress = XLSX.utils.encode_cell({c: colIndex, r: ROW_INDEX_MODELS});
+                const cell = worksheet[cellAddress];
+                
+                // 讀取原始值 (v) 或格式化字串 (w)
+                const modelName = cell ? (cell.v ?? cell.w)?.toString().trim() : null;
+
+                if (!modelName) {
+                    // 遇到空儲存格則停止
+                    break;
+                }
+
+                // 填充下拉選單和內部型號列表
+                if (modelName.length > 0) {
+                    deviceModels.push(modelName); // 僅儲存型號名稱
+                    const option = document.createElement('option');
+                    option.value = modelName;
+                    option.textContent = modelName;
+                    modelSelect.appendChild(option);
+                    log(`發現設備型號: ${modelName}`, 'info');
+                }
+                colIndex++;
+            }
+
+            if (deviceModels.length === 0) {
+                log('警告：在規格檔中未找到任何設備型號。請確認規格檔格式是否正確。', 'error');
+            } else {
+                log(`成功從規格檔解析 ${deviceModels.length} 個設備型號。請選擇型號。`, 'success');
+                modelSelect.disabled = false; // 成功讀取後啟用下拉選單
+                
+                // 確保選擇型號後，如果控制檔也已載入，就啟用生成按鈕
+                modelSelect.onchange = () => {
+                     if (modelSelect.value && ctrlFile) {
+                         generateBtn.disabled = false;
+                     } else {
+                         generateBtn.disabled = true;
+                     }
+                };
+            }
+
+        } catch (error) {
+            log(`讀取型號失敗: ${error.message}`, 'error');
+        } finally {
+            readModelBtn.disabled = false;
+        }
+    }
+
+    /**
+     * @description 在給定的工作表中尋找指定設備型號對應的欄位索引 (Column Index)
+     * @param {Object} workbook - XLSX 工作簿
+     * @param {string} sheetName - 工作表名稱
+     * @param {string} modelName - 要尋找的設備型號
+     * @param {string} fileType - 檔案類型描述 ("規格檔" 或 "控制檔")
+     * @returns {number | null} 欄位索引 (從 0 開始) 或 null (找不到)
+     */
+    function findModelColumnIndex(workbook, sheetName, modelName, fileType) {
+        const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) {
+            log(`警告: [${fileType}] 中找不到工作表: ${sheetName}`, 'error');
+            return null;
+        }
+        
+        log(`在 [${fileType}] 的工作表 [${sheetName}] 中尋找型號 [${modelName}]...`, 'info');
+
+        let colIndex = START_COL_INDEX;
+        // 型號始終位於 Row 4 (R=3)
+        while (true) {
+            const cellAddress = XLSX.utils.encode_cell({c: colIndex, r: ROW_INDEX_MODELS});
+            const cell = worksheet[cellAddress];
+            const currentModel = cell ? (cell.v ?? cell.w)?.toString().trim() : null;
+
+            if (!currentModel) {
+                // 遇到空儲存格則停止
+                break;
+            }
+
+            if (currentModel === modelName) {
+                log(`成功在 [${fileType}] 的工作表 [${sheetName}] 找到型號 [${modelName}]，位於 ${XLSX.utils.encode_col(colIndex)} 欄。`, 'info');
+                return colIndex;
+            }
+            colIndex++;
+        }
+
+        log(`錯誤: 在 [${fileType}] 的工作表 [${sheetName}] 中找不到設備型號 [${modelName}] 對應的欄位。`, 'error');
+        return null;
+    }
+
+
+    /**
+     * @description 根據規格檔和選定型號，解析單個工作表並生成 JSON 數據
+     * @param {Object} workbook - XLSX 工作簿
+     * @param {string} sheetName - 工作表名稱
+     * @param {number} modelColIndex - 選定設備型號的欄位索引 (從 0 開始)
+     * @param {boolean} includeEmptyValues - 當值為空時，是否仍將 Key 寫入 JSON 並設定為空字串 ("") (例如: DeviceINFO.json 或 FWControl.json 的新需求)
+     * @returns {Object} 生成的 JSON 物件
+     */
+    function parseSheetToJson(workbook, sheetName, modelColIndex, includeEmptyValues = false) {
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // 檢查欄位索引是否有效
+        if (modelColIndex === null || modelColIndex === undefined || !worksheet) {
+             // 錯誤已在 findModelColumnIndex 中記錄
+             return null;
+        }
+
+
+        const jsonData = {};
+        const KEY_COL_INDEX = 1; // 參數名稱 (Key) 來源： Column 2 (B 欄)
+        const START_ROW_INDEX = 6; // 數據讀取從 Row 7 (R=6) 開始
+
+        let rowIndex = START_ROW_INDEX;
+
+        while (true) {
+            // 1. 讀取參數名稱 (Key)
+            const keyAddress = XLSX.utils.encode_cell({c: KEY_COL_INDEX, r: rowIndex});
+            const keyCell = worksheet[keyAddress];
+            const key = keyCell ? (keyCell.v ?? keyCell.w)?.toString().trim() : null;
+
+            if (!key || key.length === 0) {
+                // 遇到空值時停止讀取
+                break;
+            }
+
+            // 2. 讀取參數數值 (Value)
+            const valueAddress = XLSX.utils.encode_cell({c: modelColIndex, r: rowIndex});
+            const valueCell = worksheet[valueAddress];
+
+            // 數據類型與精度約束 (CRITICAL): 嚴格保持 Excel 儲存格中的原始數據類型
+            let value = null;
+            if (valueCell) {
+                // 如果是數字型態，使用原始數值 v (JS number)
+                if (valueCell.t === 'n') {
+                    value = valueCell.v;
+                } else {
+                    // 否則，使用原始值 v (字串或布林等)
+                    value = valueCell.v;
+                }
+            }
+
+            // 處理空值 (根據 includeEmptyValues 決定是否跳過或設定為 "")
+            if (value === null || value === undefined) {
+                if (includeEmptyValues) {
+                    // 如果允許保留空值，將其設定為空字串 ("") (文字格式)
+                    value = "";
+                } else {
+                    // 原始行為：如果值為空則跳過此 Key/Value 對
+                    rowIndex++;
+                    continue; 
+                }
+            }
+
+            jsonData[key] = value;
+            
+            rowIndex++;
+        }
+
+        log(`成功解析工作表 [${sheetName}]，共匯出 ${Object.keys(jsonData).length} 個參數。`, 'info');
+        return jsonData;
+    }
+
+    /**
+     * @description 處理 DeviceINFO.json 的特殊業務邏輯 (FWversion 和 SeriesNumber)
+     * @param {Object} rawData - 從 Excel 解析出來的原始 JSON 資料
+     * @returns {Object} 處理後的 JSON 資料
+     */
+    function processDeviceInfoData(rawData) {
+        if (!rawData) return {};
+        const processedData = { ...rawData };
+        
+        // 規則 1: 參數名稱:FWversion，固定寫入空值 ("")
+        processedData['FWversion'] = "";
+        log('已應用 DeviceINFO.json 規則：FWversion 固定寫入空字串 ("")。', 'info');
+
+        // 規則 2: 參數名稱:SeriesNumber，讀取後將 "," 拿掉，格式一樣為文字。
+        if (processedData['SeriesNumber'] !== undefined && processedData['SeriesNumber'] !== null) {
+            // 確保它是字串後移除逗號
+            let originalValue = String(processedData['SeriesNumber']);
+            let newValue = originalValue.replace(/,/g, '');
+            processedData['SeriesNumber'] = newValue;
+            log(`已應用 DeviceINFO.json 規則：SeriesNumber 移除逗號。原值: "${originalValue}", 新值: "${newValue}"`, 'info');
+        } else {
+             // 確保其存在且為字串。
+             processedData['SeriesNumber'] = ""; // 保險設置，確保為字串
+             log('DeviceINFO.json 規則：SeriesNumber 遺失或為空，已設定為空字串 ("")。', 'info');
+        }
+
+        return processedData;
+    }
+
+
+    /**
+     * @description 執行檔案生成與輸出 (主業務邏輯)
+     */
+    async function generateFiles() {
+        const selectedModel = modelSelect.value;
+
+        if (!specFile || !ctrlFile || !selectedModel) {
+            log('請確認已選擇規格檔、控制檔，並選擇設備輸出型號。', 'error');
+            return;
+        }
+
+        if (!validateFileName(specFile, 'spec') || !validateFileName(ctrlFile, 'ctrl')) {
+            return;
+        }
+
+        // 禁用按鈕防止重複操作
+        generateBtn.disabled = true;
+        log(`\n--- 開始生成檔案，設備型號: ${selectedModel} ---`);
+
+        try {
+            // 1. 讀取兩個工作簿
+            const specWorkbook = await readExcelFile(specFile);
+            const ctrlWorkbook = await readExcelFile(ctrlFile);
+
+            // 2. 準備 JSON 數據
+            const fileContents = {};
+            const includeEmpty = true;  // for DeviceINFO.json and FWControl.json
+            const excludeEmpty = false; // Original Spec rule for other files (skip empty value)
+
+            // --- 讀取規格檔相關 JSON ---
+            const specFilesToProcess = [
+                'FWSpecification.json', 
+                'OutputProtection.json', 
+                'ProtectReplyFile.json', 
+                'DeviceINFO.json'
+            ];
+
+            for (const filename of specFilesToProcess) {
+                const { sheet: sheetName, fileType } = SHEET_MAP[filename];
+                
+                // 步驟 A: 在當前工作表中獨立查找設備型號欄位
+                const modelColIndex = findModelColumnIndex(specWorkbook, sheetName, selectedModel, fileType);
+                
+                if (modelColIndex === null) {
+                    log(`致命錯誤：因為找不到型號欄位，跳過 ${filename} 生成。`, 'error');
+                    fileContents[filename] = {};
+                    continue;
+                }
+
+                // 步驟 B: 解析數據 (DeviceINFO.json 允許空值，其他維持原始規格)
+                const isDeviceInfo = (filename === 'DeviceINFO.json');
+                const rawData = parseSheetToJson(specWorkbook, sheetName, modelColIndex, isDeviceInfo ? includeEmpty : excludeEmpty);
+
+                // 步驟 C: 應用特殊規則 (DeviceINFO.json)
+                if (isDeviceInfo && rawData) {
+                    fileContents[filename] = processDeviceInfoData(rawData);
+                } else {
+                    fileContents[filename] = rawData || {};
+                }
+            }
+            
+            // --- 讀取控制檔相關 JSON (FWControl.json) ---
+            const ctrlFilename = 'FWControl.json';
+            const { sheet: ctrlSheetName, fileType: ctrlFileType } = SHEET_MAP[ctrlFilename];
+            
+            // 步驟 A: 在控制檔的工作表中獨立查找設備型號欄位
+            const ctrlModelColIndex = findModelColumnIndex(ctrlWorkbook, ctrlSheetName, selectedModel, ctrlFileType);
+            
+            if (ctrlModelColIndex === null) {
+                 log(`致命錯誤：因為找不到型號欄位，跳過 ${ctrlFilename} 生成。`, 'error');
+                 fileContents[ctrlFilename] = {};
+            } else {
+                // 步驟 B: 解析數據 (FWControl.json 現在也允許保留空值 Key)
+                const ctrlData = parseSheetToJson(ctrlWorkbook, ctrlSheetName, ctrlModelColIndex, includeEmpty) || {};
+                fileContents[ctrlFilename] = ctrlData;
+                
+                // 步驟 C: 診斷 FWControl.json 結果
+                if (Object.keys(ctrlData).length === 0) {
+                     log(`🚨 注意： ${ctrlFilename} 已嘗試保留空值 Key，但結果仍為空 (0 個參數)。請檢查控制檔的工作表 [${ctrlSheetName}]，確認 Column 2 (B 欄) 是否有參數名稱。`, 'error');
+                } else {
+                     log(`✅ 成功： ${ctrlFilename} 已解析，共匯出 ${Object.keys(ctrlData).length} 個參數，包含所有 Key (空值 Key 已設為 "" )。`, 'success');
+                }
+            }
+
+
+            // 加入固定內容
+            fileContents['CalibrationParemeter.json'] = CALIBRATION_JSON;
+            log('已載入 CalibrationParemeter.json 固定內容。', 'info');
+
+            /*
+            // LogFile.json (建議保留，作為紀錄)
+            fileContents['LogFile.json'] = {
+                generator: "XlsxToJson_RP_SPEC Tool (Web)",
+                timestamp: new Date().toISOString(),
+                deviceModel: selectedModel,
+                specFileName: specFile.name,
+                ctrlFileName: ctrlFile.name,
+                status: "Success"
+            };
+            log('已生成 LogFile.json 紀錄檔案。', 'info');
+            */
+
+            // 3. 建立 ZIP 檔案
+            const zip = new JSZip();
+
+            // 核心 JSON 檔案 (根目錄)
+            // LogFile.json 建議放在根目錄
+            for (const [filename, content] of Object.entries(fileContents)) {
+                 if (['OutputProtection.json', 'ProtectReplyFile.json'].includes(filename)) continue;
+                
+                log(`準備打包檔案: ${filename}`);
+                // 將 JSON 物件轉換為格式化字串
+                const jsonString = JSON.stringify(content, null, 4);
+                zip.file(filename, jsonString);
+            }
+
+            // 檔案夾: Protect/
+            const protectFolder = zip.folder("Protect");
+            protectFolder.file("OutputProtection.json", JSON.stringify(fileContents['OutputProtection.json'], null, 4));
+            protectFolder.file("ProtectReplyFile.json", JSON.stringify(fileContents['ProtectReplyFile.json'], null, 4));
+            log('已將 Protect/OutputProtection.json 和 Protect/ProtectReplyFile.json 加入 Protect 資料夾。', 'info');
+
+
+            // 4. 最終輸出與命名
+            // ZIP 檔名： 選定設備型號_SPEC + yyyymmddHHMMSS
+            const now = new Date();
+            const dateStr = [
+                now.getFullYear(),
+                String(now.getMonth() + 1).padStart(2, '0'),
+                String(now.getDate()).padStart(2, '0'),
+                String(now.getHours()).padStart(2, '0'),
+                String(now.getMinutes()).padStart(2, '0'),
+                String(now.getSeconds()).padStart(2, '0')
+            ].join('');
+            
+            const zipFileName = `${selectedModel}_SPEC_${dateStr}.zip`;
+            log(`ZIP 壓縮包名稱: ${zipFileName}`, 'info');
+
+            log('開始壓縮檔案並下載...', 'info');
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, zipFileName);
+
+            log(`✅ 檔案生成與下載成功！ZIP 檔名: ${zipFileName}`, 'success');
+
+        } catch (error) {
+            log(`檔案生成失敗，請檢查檔案內容和格式: ${error.message}`, 'error');
+        } finally {
+            generateBtn.disabled = false;
+            log('--- 檔案生成流程結束 ---\n', 'info');
+        }
+    }
+
+
+    // --- 事件監聽器 ---
+
+    // 規格檔選擇
+    specFileInput.addEventListener('change', (event) => {
+        specFile = event.target.files[0];
+        if (specFile) {
+            log(`已選擇規格檔: ${specFile.name}`);
+            // 重置型號選擇和生成按鈕狀態
+            modelSelect.innerHTML = '<option value="" disabled selected>請先讀取規格檔以載入型號</option>';
+            modelSelect.disabled = true;
+            generateBtn.disabled = true;
+            deviceModels = [];
+            validateFileName(specFile, 'spec');
+        }
+    });
+
+    // 控制檔選擇
+    ctrlFileInput.addEventListener('change', (event) => {
+        ctrlFile = event.target.files[0];
+        if (ctrlFile) {
+            log(`已選擇控制檔: ${ctrlFile.name}`);
+            validateFileName(ctrlFile, 'ctrl');
+            // 如果型號已選，則啟用生成按鈕
+            if (modelSelect.value) {
+                generateBtn.disabled = false;
+            }
+        }
+    });
+
+    // 讀取型號按鈕
+    readModelBtn.addEventListener('click', readModels);
+
+    // 執行生成檔案按鈕
+    generateBtn.addEventListener('click', generateFiles);
+
+</script>
+
+</body>
+</html>
